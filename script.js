@@ -1,9 +1,8 @@
 // hydrate-components.js @ https://freshman.dev/lib/2/hydrate-components/script.js https://freshman.dev/copyright.js
+if (!window['hydrate-components.js']) (_=>{window['hydrate-components.js']=Date.now()
 Object.entries({
     'common.js': '/lib/2/common/script.js',
 }).map(([key,src])=>!window[key]&&document.head.append((x=>Object.assign(x,{innerHTML:(src=>(x=>{x.withCredentials=false;x.open('GET',src,false);x.send();return x.responseText})(new XMLHttpRequest()))(new URL(src,location.port==='3030'/*local testing on port 3030*/?location.origin:'https://freshman.dev').toString())}))(document.createElement('script'))))
-
-if (!window['hydrate-components.js']) (_=>{window['hydrate-components.js']=Date.now()
 
 const log = named_log('hydrate-components.js')
 let _hydrated    
@@ -412,7 +411,7 @@ defer(async () => {
                 word-break: normal;
                 border-radius: calc(0.8em + .5em - .2em);
                 font-size: 1em !important;
-                width: 0; min-width: -webkit-fill-available;
+                width: auto; min-width: -webkit-fill-available;
                 `
 
                 L.innerHTML = (L.textContent || L.dataset['markdown']).trim()
@@ -476,7 +475,8 @@ defer(async () => {
 
         external: L => {
             if (!L.textContent) L.textContent = L.dataset['external']
-            if (!L.href || L.href === location.origin + location.pathname) L.href = L.textContent.replace(/^(https?:\/\/)?/, 'http://')
+            // if (!L.href || L.href === location.origin + location.pathname) L.href = L.textContent.replace(/^(https?:\/\/)?/, 'http://')
+            if (!L.href) L.href = L.textContent.replace(/^(https?:\/\/)?/, 'http://')
             L.href = L.href.replace(/\.$/, location.host)
             if (!(L.href.startsWith('/') || L.href.startsWith(location.origin)) || L.dataset['external']) /\w$/.test(L.textContent) && L.append((/mailto:/.test(L.href) ? '✉' : '') + '↗')
         },
@@ -884,6 +884,64 @@ defer(async () => {
             last: undefined,
             down: undefined,
         },
+        audio: L => {
+            L.style.display = 'none'
+            const timeDisplay = (sec) => {
+                return [Math.floor(sec / 60), Math.ceil(sec % 60)].map(x => String(x).padStart(2, '0')).join(':')
+            }
+            const visual = node(`<div class="audio_visual" style="
+            background: #000;
+            color: #fff;
+            padding: .25em .75em;
+            border-radius: 10em;
+            ">
+                <style>
+                    .audio_visual {
+                        font-size: 1.5em;
+                    }
+                    .audio_visual:not(.playing) .audio_visual_pause {
+                        text-decoration: none;
+                    }
+                    .audio_visual.playing .audio_visual_play {
+                        text-decoration: none;
+                    }
+                    .audio_visual:not(.started) .audio_visual_reset {
+                        display: none
+                    }
+                </style>
+                <a class="audio_visual_play">play</a>
+                <a class="audio_visual_pause">pause</a>
+                <span class="audio_visual_time"></span>
+                <a class="audio_visual_reset">reset</a>
+            </div>`)
+
+            Q(visual, '.audio_visual_play').onclick = e => {
+                L.play()
+                visual.classList.toggle('playing', true)
+                visual.classList.toggle('started', true)
+            }
+            Q(visual, '.audio_visual_pause').onclick = e => {
+                L.pause()
+                visual.classList.toggle('playing', false)
+            }
+            on(L, 'timeupdate', e => {
+                Q(visual, '.audio_visual_time').innerHTML = `${timeDisplay(L.currentTime)} / ${timeDisplay(L.duration)}`
+            })
+
+            const reset = () => {
+                L.pause()
+                L.currentTime = 0
+                defer(() => {
+                    visual.classList.toggle('playing', false)
+                    visual.classList.toggle('started', false)
+                    Q(visual, '.audio_visual_time').innerHTML = timeDisplay(L.duration)
+                })
+            }
+            Q(visual, '.audio_visual_reset').onclick = e => reset()
+            on(L, 'loadedmetadata ended', e => reset())
+
+            L.insertAdjacentElement('afterend', visual)
+        },
     }
 
     await hydrate('*', hydrates.split)
@@ -902,6 +960,7 @@ defer(async () => {
     await hydrate('[data-player]', hydrates.player)
     await hydrate('[data-code], code', hydrates.code)
     await hydrate(QQ('[data-hydrate][type=checkbox], [data-checklist] [type=checkbox]'), hydrates.checkbox)
+    await hydrate(QQ('audio[controls]'), hydrates.audio)
 
     document.head.append(node(`<style>
     input::placeholder {
