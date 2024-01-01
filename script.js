@@ -37,7 +37,10 @@ defer(async () => {
             Q(L, '.subtitle').textContent = subtitle
         },
         signup: L => {
-            const toggle = node(`<span data-hydrate data-label="${L.dataset['label'] || 'your email'}" data-toggle="${L.dataset['toggle'] || '✅︎'}" onclick>${L.dataset['signup'] || '🔔'}</span>`)
+            const display = L.dataset['signup'] || '🔔'
+            log(display, display.toLowerCase().split('').some(x => strings.alphanum.includes(x)))
+            const tag = display.toLowerCase().split('').some(x => strings.alphanum.includes(x)) ? 'a' : 'span'
+            const toggle = node(`<${tag} data-hydrate data-label="${L.dataset['label'] || 'your email'}" data-toggle="${L.dataset['toggle'] || '✅︎'}" onclick>${display}</${tag}>`)
             const label = L.innerHTML
             L.innerHTML = label ? `<span class=label>${label}</span> ` : ''
             L.insertAdjacentElement('beforeend', toggle)
@@ -780,6 +783,13 @@ defer(async () => {
                                 href: location.href,
                             })
                         })}`)
+                        else fetch(location.origin.replace(/:\d+/, ':5050') + `/api/q/+/updates?${new URLSearchParams({
+                            msg: JSON.stringify({
+                                remove: state.value,
+                                uuid: L.dataset['uuid'],
+                                href: location.href,
+                            })
+                        })}`)
                         if (!value !== !state.value) {
                             L.innerHTML = L.dataset['toggle']
                             L.dataset['toggle'] = state.display
@@ -889,15 +899,14 @@ defer(async () => {
             const timeDisplay = (sec) => {
                 return [Math.floor(sec / 60), Math.ceil(sec % 60)].map(x => String(x).padStart(2, '0')).join(':')
             }
-            const visual = node(`<div class="audio_visual" style="
-            background: #000;
-            color: #fff;
-            padding: .25em .75em;
-            border-radius: 10em;
-            ">
+            const visual = node(`<div class="audio_visual">
                 <style>
                     .audio_visual {
-                        font-size: 1.5em;
+                        font-size: 1.25em;
+                        background: #000;
+                        color: #fff;
+                        padding: .25em .75em;
+                        border-radius: 10em;
                     }
                     .audio_visual:not(.playing) .audio_visual_pause {
                         text-decoration: none;
@@ -924,8 +933,8 @@ defer(async () => {
                 L.pause()
                 visual.classList.toggle('playing', false)
             }
-            on(L, 'timeupdate', e => {
-                Q(visual, '.audio_visual_time').innerHTML = `${timeDisplay(L.currentTime)} / ${timeDisplay(L.duration)}`
+            on(L, 'play timeupdate', e => {
+                Q(visual, '.audio_visual_time').innerHTML = L.currentTime || !L.paused ? `${timeDisplay(L.currentTime)} / ${timeDisplay(L.duration)}` : timeDisplay(L.duration)
             })
 
             const reset = () => {
@@ -934,13 +943,160 @@ defer(async () => {
                 defer(() => {
                     visual.classList.toggle('playing', false)
                     visual.classList.toggle('started', false)
-                    Q(visual, '.audio_visual_time').innerHTML = timeDisplay(L.duration)
                 })
             }
             Q(visual, '.audio_visual_reset').onclick = e => reset()
             on(L, 'loadedmetadata ended', e => reset())
 
             L.insertAdjacentElement('afterend', visual)
+        },
+        combobox: L => {
+            L.style.display = 'none'
+            const placeholder = L.dataset['placeholder'] || 'type to select'
+            const selected = Q(L, '[selected]')
+            const visual = node(`<div class="combobox_visual">
+                <style>
+                .combobox_visual {
+                    position: relative;
+                    ${devices.is_mobile ? `
+                    font-size: max(1em, 16px);
+                    `: ''}
+                }
+                .combobox_visual_input {
+                    background: #fff; color: #000;
+                    border: 1px solid #000;
+                    padding: 1px 3px !important;
+                    border-radius: 2px !important;
+                    margin: 0;
+                }
+                .combobox_visual_options {
+                    display: none;
+                    position: absolute;
+                    top: 100%; left: 0;
+                    margin: 0 2px;
+                    border: 1px solid #000;
+                    min-width: calc(100% - 4px);
+                    border-radius: 2px !important;
+                    z-index: 1;
+                }
+                .combobox_visual_options .combobox_visual_option {
+                    padding: 1px 3px;
+                    background: #fff; color: #000;
+                    cursor: pointer;
+                }
+                .combobox_visual_options .combobox_visual_option:is(:hover, :focus),
+                .combobox_visual_options:not(:has(.combobox_visual_option:is(:hover, :focus))) .combobox_visual_option:first-child {
+                    filter: invert();
+                }
+                .combobox_visual:focus-within .combobox_visual_options {
+                    display: block;
+                }
+                </style>
+                <input class="combobox_visual_input" tabindex=0 placeholder="${placeholder}" value="${selected?.value||''}"></input>
+                <div class="combobox_visual_options"></div>
+            </div>`)
+            const input = Q(visual, 'input')
+            const options = Q(visual, '.combobox_visual_options')
+            const updateOptionsList = (select_first=false) => {
+                options.innerHTML = ''
+                const search = input.value
+                const scoreOption = option => option.value === search ? 0 : 1
+                const matched_options = list(L.children).filter(option => {
+                    const value = option.value || ''
+                    const text = option.textContent || ''
+                    return !search || value.includes(search) || text.includes(search)
+                }).map(option => {
+                    const option_value = option.value || option.textContent
+                    return {
+                        value: option_value,
+                        option,
+                    }
+                }).sort((a, b) => scoreOption(a) - scoreOption(b))
+                // log({matched_options})
+                matched_options.map(({ value: option_value, option }, i) => {
+                    const option_node = node(`<div class="combobox_visual_option" tabindex=0>
+                        ${option.innerHTML || option_value}
+                    </div>`)
+                    option_node.onclick = option_node.onkeydown = e => {
+                        if (e.key && e.key !== 'Enter') return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // log(option)
+                        option.click()
+                        L.value = input.value = (input.value === option_value) ? '' : option_value
+                        // log(L.value)
+                        updateOptionsList()
+                        if (!L.value) input.focus()
+                    }
+                    options.append(option_node)
+                    if (select_first && i === 0) {
+                        // defer(() => option_node.click())
+                        defer(() => {
+                            option_node.click()
+                        })
+                    }
+                }).join('\n')
+                // if (!input.value && document.activeElement === input) {
+                //     options.style.display = 'block'
+                // }
+            }
+            on(input, 'input', e => {
+                updateOptionsList()
+            })
+            on([input, options], 'focus', e => {
+                options.style.display = 'block'
+            })
+            on(input, 'blur', e => {
+                defer(() => {
+                    options.style.display = ''
+                }, 150)
+            })
+            on(input, 'keydown', e => {
+                if (e.key === 'Enter') {
+                    updateOptionsList(true)
+                    input.blur()
+                }
+                if (e.key === 'Escape') {
+                    input.blur()
+                    input.value = L.value
+                }
+            })
+            updateOptionsList()
+            L.insertAdjacentElement('afterend', visual)
+        },
+        switch: L => {
+            const id = `hydrate-switch-${rand.alphanum(16)}`
+            L.classList.add(id)
+            const css = node(`<style>
+            .${id} {
+                -webkit-appearance: none;
+                width: 3em;
+                height: 1.5em;
+                flex-shrink: 0;
+                background: transparent;
+                color: #000;
+                border: 1px solid currentcolor;
+                border-radius: 10em;
+                position: relative;
+            }
+            .${id}::after {
+                content: "";
+                position: absolute;
+                top: 0; left: 0; 
+                height: 1em; width: 1em;
+                margin: calc(.25em - 1px);
+                border-radius: 10em;
+                background: currentcolor;
+            }
+            .${id}:checked {
+                background: #000;
+                color: #fff;
+            }
+            .${id}:checked::after {
+                left: unset; right: 0;
+            }
+            </style>`)
+            L.insertAdjacentElement('afterend', css)
         },
     }
 
@@ -959,8 +1115,10 @@ defer(async () => {
     await hydrate(QQ('html:not(.preserve-links) [href]:not([data-player]):not([data-ignore])'), hydrates.external)
     await hydrate('[data-player]', hydrates.player)
     await hydrate('[data-code], code', hydrates.code)
-    await hydrate(QQ('[data-hydrate][type=checkbox], [data-checklist] [type=checkbox]'), hydrates.checkbox)
+    await hydrate(QQ('[data-hydrate][type=checkbox]:not([data-switch]), [data-checklist] [type=checkbox]'), hydrates.checkbox)
     await hydrate(QQ('audio[controls]'), hydrates.audio)
+    await hydrate(QQ('[data-combobox]'), hydrates.combobox)
+    await hydrate(QQ('[data-switch]'), hydrates.switch)
 
     document.head.append(node(`<style>
     input::placeholder {
