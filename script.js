@@ -29,7 +29,7 @@ defer(async () => {
             return true
         },
 
-        style: L => L.outerHTML = `<meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1" /><style>${css.common.base}:root{min-height:max-content;${css.mixin.solarize}--background:#fdfcfa;--color:#101010;--button:#eee;}*{box-sizing:border-box;font-family:SFMono-Regular,Menlo,Monaco,Consolas,"LiberationMono","CourierNew",monospace;}html,body{display:flex;flex-direction:column;align-items:flex-start}html{height:100%;background:var(--background);color:var(--color);font-size:12px;}body{flex-grow:1;padding:.5em;}iframe{border:0;display:block;}a{color:inherit;text-decoration:underline;}a:hover{background:var(--color);color:var(--background);}button,a,input,*[onclick]{font-size:1em;cursor:pointer;touch-action:manipulation;}button,input:is(:not([type]),[type=text],[type=password],[type=email]){border:1px solid currentColor;border-radius:10em;padding:.1667em.67em;height:calc(100%-1px);margin:.5px 0;}button{background:var(--button);user-select:none;}input:is(:not([type]),[type=text]){background:none;}input:is(:not([type]),[type=text],[type=password],[type=email])::placeholder{opacity:.425;}</style>`,
+        style: L => L.outerHTML = `<meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1" /><style>${css.common.base}:root{min-height:max-content;${css.mixin.solarize}--background:#fdfcfa;--color:#101010;--button:#eee;}*{box-sizing:border-box;font-family:SFMono-Regular,Menlo,Monaco,Consolas,"LiberationMono","CourierNew",noto-emoji,monospace;}html,body{display:flex;flex-direction:column;align-items:flex-start}html{height:100%;background:var(--background);color:var(--color);font-size:12px;}body{flex-grow:1;padding:.5em;}iframe{border:0;display:block;}a{color:inherit;text-decoration:underline;}a:hover{background:var(--color);color:var(--background);}button,a,input,*[onclick]{font-size:1em;cursor:pointer;touch-action:manipulation;}button,input:is(:not([type]),[type=text],[type=password],[type=email]){border:1px solid currentColor;border-radius:10em;padding:.1667em.67em;height:calc(100%-1px);margin:.5px 0;}button{background:var(--button);user-select:none;}input:is(:not([type]),[type=text]){background:none;}input:is(:not([type]),[type=text],[type=password],[type=email])::placeholder{opacity:.425;}</style>`,
         // style: L => L.outerHTML = `<meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1" /><style>:root{--background:#fdfcfa;--color:#101010;--button:#eee;}*{box-sizing:border-box;font-family:SFMono-Regular,Menlo,Monaco,Consolas,"LiberationMono","CourierNew",monospace;}html,body{display:flex;flex-direction:column;}html{height:100%;background:var(--background);color:var(--color);font-size:12px;}body{flex-grow:1;padding:.5em;row-gap:.5em;}iframe{border:0;display:block;}a{color:inherit;text-decoration:underline;}a:hover{background:var(--color);color:var(--background);}button,a,input,*[onclick]{font-size:1em;cursor:pointer;touch-action:manipulation;}button,input:is(:not([type]),[type=text],[type=password],[type=email]){border:1px solid currentColor;border-radius:0;padding:.1667em.67em;}input:is(:not([type]),[type=text],[type=password],[type=email]):not(input:is(:not([type]),[type=text],[type=password],[type=email])+input:is(:not([type]),[type=text],[type=password],[type=email])){border-top-left-radius:.9em;border-top-right-radius:.9em}input:is(:not([type]),[type=text],[type=password],[type=email])+input:is(:not([type]),[type=text],[type=password],[type=email]){border-bottom-left-radius:.9em;border-bottom-right-radius:.9em;border-top:0;margin-top:-1px}button{background:var(--button);user-select:none;}input:is(:not([type]),[type=text]){background:none;}input:is(:not([type]),[type=text],[type=password],[type=email])::placeholder{opacity:.425;}</style>`,
         title: L => {
             L.innerHTML = `<span class=title style="font-weight: bold"></span>${title ? ' ' : ''}<span class=subtitle style="font-style:italic;opacity:.4;letter-spacing:-.1em"></span>`
@@ -897,6 +897,7 @@ defer(async () => {
         audio: L => {
             L.style.display = 'none'
             const timeDisplay = (sec) => {
+                if (!Number.isFinite(sec)) return ''
                 return [Math.floor(sec / 60), Math.ceil(sec % 60)].map(x => String(x).padStart(2, '0')).join(':')
             }
             const visual = node(`<div class="audio_visual">
@@ -949,27 +950,41 @@ defer(async () => {
             on(L, 'loadedmetadata ended', e => reset())
 
             L.insertAdjacentElement('afterend', visual)
+
+            const onElementRemoved = (element, callback) => {
+                new MutationObserver(function(mutations) {
+                    if (!document.body.contains(element)) {
+                        callback()
+                        this.disconnect()
+                    }
+                }).observe(element.parentElement, {childList: true})
+            }
+            onElementRemoved(L, () => {
+                visual.remove()
+            });
         },
         combobox: L => {
+            if (L.style.display === 'none') return
             L.style.display = 'none'
             const placeholder = L.dataset['placeholder'] || 'type to select'
             const selected = Q(L, '[selected]')
-            const visual = node(`<div class="combobox_visual">
+            const id = `combobox-${rand.alphanum(8)}`
+            const visual = node(`<div id="${id}">
                 <style>
-                .combobox_visual {
+                #${id} {
                     position: relative;
                     ${devices.is_mobile ? `
                     font-size: max(1em, 16px);
                     `: ''}
                 }
-                .combobox_visual_input {
+                #${id} .combobox-input {
                     background: #fff; color: #000;
                     border: 1px solid #000;
                     padding: 1px 3px !important;
                     border-radius: 2px !important;
                     margin: 0;
                 }
-                .combobox_visual_options {
+                #${id} .combobox-options {
                     display: none;
                     position: absolute;
                     top: 100%; left: 0;
@@ -979,31 +994,31 @@ defer(async () => {
                     border-radius: 2px !important;
                     z-index: 1;
                 }
-                .combobox_visual_options .combobox_visual_option {
+                #${id} .combobox-options .combobox-option {
                     padding: 1px 3px;
                     background: #fff; color: #000;
                     cursor: pointer;
                 }
-                .combobox_visual_options .combobox_visual_option:is(:hover, :focus),
-                .combobox_visual_options:not(:has(.combobox_visual_option:is(:hover, :focus))) .combobox_visual_option:first-child {
+                #${id} .combobox-options .combobox-option:is(:hover, :focus),
+                #${id} .combobox-options:not(:has(.combobox-option:is(:hover, :focus))) .combobox-option:first-child {
                     filter: invert();
                 }
-                .combobox_visual:focus-within .combobox_visual_options {
+                #${id}:focus-within .combobox-options {
                     display: block;
                 }
                 </style>
-                <input class="combobox_visual_input" tabindex=0 placeholder="${placeholder}" value="${selected?.value||''}"></input>
-                <div class="combobox_visual_options"></div>
+                <input class="combobox-input" tabindex=0 placeholder="${placeholder}" value="${selected?.value||''}"></input>
+                <div class="combobox-options"></div>
             </div>`)
             const input = Q(visual, 'input')
-            const options = Q(visual, '.combobox_visual_options')
+            const options = Q(visual, '.combobox-options')
             const updateOptionsList = (select_first=false) => {
                 options.innerHTML = ''
-                const search = input.value
-                const scoreOption = option => option.value === search ? 0 : 1
+                const search = input.value.toLowerCase()
+                const scoreOption = option => option.value.toLowerCase() === search ? 0 : 1
                 const matched_options = list(L.children).filter(option => {
-                    const value = option.value || ''
-                    const text = option.textContent || ''
+                    const value = (option.value || '').toLowerCase()
+                    const text = (option.textContent || '').toLowerCase()
                     return !search || value.includes(search) || text.includes(search)
                 }).map(option => {
                     const option_value = option.value || option.textContent
@@ -1014,16 +1029,18 @@ defer(async () => {
                 }).sort((a, b) => scoreOption(a) - scoreOption(b))
                 // log({matched_options})
                 matched_options.map(({ value: option_value, option }, i) => {
-                    const option_node = node(`<div class="combobox_visual_option" tabindex=0>
+                    const option_node = node(`<div class="combobox-option" tabindex=0>
                         ${option.innerHTML || option_value}
                     </div>`)
-                    option_node.onclick = option_node.onkeydown = e => {
+                    option_node.onclick = option_node.onkeydown = async e => {
                         if (e.key && e.key !== 'Enter') return
                         e.preventDefault()
                         e.stopPropagation()
+                        if (e.key) await Promise.resolve()
                         // log(option)
                         option.click()
                         L.value = input.value = (input.value === option_value) ? '' : option_value
+                        L.dispatchEvent(new Event('change'))
                         // log(L.value)
                         updateOptionsList()
                         if (!L.value) input.focus()
@@ -1042,6 +1059,10 @@ defer(async () => {
             }
             on(input, 'input', e => {
                 updateOptionsList()
+                // defer(() => {
+                //     L.value = input.value
+                //     L.dispatchEvent(new Event('change'))
+                // })
             })
             on([input, options], 'focus', e => {
                 options.style.display = 'block'
@@ -1054,7 +1075,9 @@ defer(async () => {
             on(input, 'keydown', e => {
                 if (e.key === 'Enter') {
                     updateOptionsList(true)
-                    input.blur()
+                    // input.blur()
+                    // L.value = input.value
+                    // L.dispatchEvent(new Event('change'))
                 }
                 if (e.key === 'Escape') {
                     input.blur()
